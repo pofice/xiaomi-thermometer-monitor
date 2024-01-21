@@ -24,3 +24,10 @@ pip install -r requirements.txt
 之后会自动打开网页，点击左上角的Connect，选择LYWSD03MMC并配对，成功后数据会自动写入data.json
 
 如果无法搜索蓝牙设备，请在浏览器中启用 Experimental Web Platform features
+
+## 使用
+运行以下命令以查看历史温度曲线：
+
+```
+streamlit run gui.py
+```
