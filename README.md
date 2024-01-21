@@ -1,5 +1,7 @@
 # 实时监控小米温度计2的温湿度信息，并保存
 
+![Demo webpage](screenshots/graph.png)
+
 ## 安装
 
 我们建议通过 venv 进行环境管理。
