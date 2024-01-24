@@ -12,8 +12,8 @@ function extractValues(output) {
         const temperature = parseFloat(matches[1]);
         const humidity = parseInt(matches[2]);
 
-        // Get the current time
-        const currentTime = new Date().toLocaleString();
+        // Get the current time in a 24-hour format
+        const currentTime = new Date().toLocaleString(undefined, { hour12: false });
 
         // Save the temperature and humidity values for Python to use
         const savedData = {
@@ -60,5 +60,20 @@ function monitorConsoleOutput() {
     extractValues(consoleOutput);
 }
 
-// Start monitoring the console output every ? second
-setInterval(monitorConsoleOutput, 6000);
+// Create a new MutationObserver instance
+const observer = new MutationObserver(() => {
+    monitorConsoleOutput();
+});
+
+// Select the target element to observe
+const targetElement = document.querySelector("#tempHumiData");
+
+// Configure the observer to watch for changes in the target element's content
+const observerConfig = {
+    childList: true,
+    subtree: true,
+    characterData: true
+};
+
+// Start observing the target element
+observer.observe(targetElement, observerConfig);
