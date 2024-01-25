@@ -26,8 +26,11 @@ pip install -r requirements.txt
 如果无法搜索蓝牙设备，请在浏览器中启用 Experimental Web Platform features
 
 ## 使用
+
 运行以下命令以查看历史温度曲线：
 
 ```
 streamlit run gui.py
 ```
+
+刷新页面即可更新数据
