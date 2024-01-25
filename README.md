@@ -15,7 +15,7 @@ python -m venv mi-env
 pip install -r requirements.txt
 ```
 
-请注意，本项目可能需要 Python 3.10 或更高版本。
+请注意，本项目可能需要 Python 3.10 或更高版本。以及您的计算机需要支持蓝牙功能。
 
 ## 运行
 
