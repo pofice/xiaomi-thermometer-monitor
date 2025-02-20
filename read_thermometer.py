@@ -18,9 +18,10 @@ async def notification_handler(sender, data):
     battery = data[3] if len(data) >= 4 else None
     
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"Temperature: {temperature}°C")
-    print(f"Humidity: {humidity}%")
-    if battery:
+    # 只在battery值合理时打印
+    if battery and 0 <= battery <= 100:
+        print(f"Temperature: {temperature}°C")
+        print(f"Humidity: {humidity}%") 
         print(f"Battery: {battery}%")
         
     return {
@@ -29,40 +30,6 @@ async def notification_handler(sender, data):
         'humidity': humidity,
         'battery': battery
     }
-
-async def connect_and_read(address):
-    try:
-        async with BleakClient(address) as client:
-            print(f"Connected to {address}")
-            
-            # Enable notifications
-            await client.start_notify(TEMP_HUMID_CHAR, notification_handler)
-            
-            # Wait for data
-            await asyncio.sleep(5)
-            
-            # Read temperature and humidity directly
-            data = await client.read_gatt_char(TEMP_HUMID_CHAR)
-            battery = await client.read_gatt_char(BATTERY_CHAR)
-            
-            temperature = struct.unpack('<H', data[0:2])[0] / 100
-            humidity = data[2]
-            battery_level = battery[0]
-            
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            # 显示电池信息但不保存到数据库
-            print(f"Battery level: {battery_level}%")
-            
-            return {
-                'currentTime': current_time, 
-                'temperature': temperature,
-                'humidity': humidity
-            }
-            
-    except Exception as e:
-        print(f"Connection error: {e}")
-        return None
 
 def save_to_database(data):
     # 数据库连接配置
@@ -92,24 +59,64 @@ async def monitor_temperature(mac_address, interval=60):
     print(f"Starting continuous monitoring. Reading every {interval} seconds...")
     
     while True:
+        client = None
         try:
-            data = await connect_and_read(mac_address)
-            if data:
-                if data['humidity'] <= 100:  # 添加简单的数据验证
-                    save_to_database(data)
-                else:
-                    print(f"Invalid humidity value: {data['humidity']}%, skipping...")
-            
-            # 等待指定的时间间隔
-            await asyncio.sleep(interval)
-            
-        except KeyboardInterrupt:
-            print("\nMonitoring stopped by user.")
-            break
+            async with BleakClient(mac_address) as client:
+                print(f"Connected to {mac_address}")
+                
+                while True:
+                    try:
+                        # 读取温湿度数据
+                        data = await client.read_gatt_char(TEMP_HUMID_CHAR)
+                        temperature = struct.unpack('<H', data[0:2])[0] / 100
+                        humidity = data[2]
+                        
+                        # 读取电池电量
+                        try:
+                            battery_data = await client.read_gatt_char(BATTERY_CHAR)
+                            battery = battery_data[0]
+                            if 0 <= battery <= 100:
+                                print(f"Battery level: {battery}%")
+                        except Exception as e:
+                            print(f"Error reading battery: {e}")
+                            battery = None
+                        
+                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # 数据验证
+                        if not (0 <= humidity <= 100 and -40 <= temperature <= 60):
+                            print(f"Invalid readings - Temperature: {temperature}°C, Humidity: {humidity}%")
+                            continue
+                        
+                        # 显示读取到的数据
+                        print(f"Temperature: {temperature:.2f}°C")
+                        print(f"Humidity: {humidity}%")
+                        print("-" * 40)
+                        
+                        # 保存数据
+                        data = {
+                            'currentTime': current_time,
+                            'temperature': temperature,
+                            'humidity': humidity
+                        }
+                        save_to_database(data)
+                        
+                        # 等待下一次读取
+                        print(f"Waiting {interval} seconds before next reading...")
+                        await asyncio.sleep(interval)
+                        
+                    except (BleakError, asyncio.TimeoutError) as e:
+                        print(f"Error during reading: {e}")
+                        break
+                        
         except Exception as e:
-            print(f"Error during monitoring: {e}")
-            print("Retrying in 5 seconds...")
+            print(f"Connection error: {e}")
+            print("Attempting to reconnect in 5 seconds...")
             await asyncio.sleep(5)
+            
+        finally:
+            if client and client.is_connected:
+                await client.disconnect()
 
 async def main():
     parser = argparse.ArgumentParser(description='Read Xiaomi Thermometer data and save to database')
