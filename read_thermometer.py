@@ -6,33 +6,60 @@ from bleak import BleakScanner, BleakClient
 import argparse
 import time
 
-# 小米温湿度计的特征值UUID
-TEMP_HUMID_UUID = "ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6"
-MAC_ADDRESS = "A4:C1:38:D5:9F:08"  # 你需要替换成你的设备MAC地址
+# Mi Thermometer services and characteristics
+MI_SERVICE = "ebe0ccb0-7a0a-4b0c-8a1a-6ff2997da3a6"
+TEMP_HUMID_CHAR = "ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6" 
+BATTERY_CHAR = "ebe0ccc4-7a0a-4b0c-8a1a-6ff2997da3a6"
 
-async def connect_and_read(mac_address):
+async def notification_handler(sender, data):
+    """Handle incoming notifications"""
+    temperature = struct.unpack('<H', data[0:2])[0] / 100
+    humidity = data[2]
+    battery = data[3] if len(data) >= 4 else None
+    
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Temperature: {temperature}°C")
+    print(f"Humidity: {humidity}%")
+    if battery:
+        print(f"Battery: {battery}%")
+        
+    return {
+        'currentTime': current_time,
+        'temperature': temperature,
+        'humidity': humidity,
+        'battery': battery
+    }
+
+async def connect_and_read(address):
     try:
-        async with BleakClient(mac_address) as client:
-            print(f"Connected to {mac_address}")
+        async with BleakClient(address) as client:
+            print(f"Connected to {address}")
             
-            # 读取特征值
-            data = await client.read_gatt_char(TEMP_HUMID_UUID)
+            # Enable notifications
+            await client.start_notify(TEMP_HUMID_CHAR, notification_handler)
             
-            # 解析数据
-            temperature = struct.unpack('H', data[0:2])[0] / 100
-            humidity = struct.unpack('H', data[2:4])[0] / 100
+            # Wait for data
+            await asyncio.sleep(5)
+            
+            # Read temperature and humidity directly
+            data = await client.read_gatt_char(TEMP_HUMID_CHAR)
+            battery = await client.read_gatt_char(BATTERY_CHAR)
+            
+            temperature = struct.unpack('<H', data[0:2])[0] / 100
+            humidity = data[2]
+            battery_level = battery[0]
             
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            print(f"Temperature: {temperature}°C")
-            print(f"Humidity: {humidity}%")
             
             return {
-                'currentTime': current_time,
+                'currentTime': current_time, 
                 'temperature': temperature,
-                'humidity': humidity
+                'humidity': humidity,
+                'battery': battery_level
             }
+            
     except Exception as e:
-        print(f"Error connecting to device: {e}")
+        print(f"Connection error: {e}")
         return None
 
 def save_to_database(data):
@@ -47,8 +74,8 @@ def save_to_database(data):
     try:
         connection = pymysql.connect(**db_config)
         with connection.cursor() as cursor:
-            sql = "INSERT INTO `temp_table` (`currentTime`, `temperature`, `humidity`) VALUES (%s, %s, %s)"
-            cursor.execute(sql, (data['currentTime'], data['temperature'], data['humidity']))
+            sql = "INSERT INTO `temp_table` (`currentTime`, `temperature`, `humidity`, `battery`) VALUES (%s, %s, %s, %s)"
+            cursor.execute(sql, (data['currentTime'], data['temperature'], data['humidity'], data['battery']))
         connection.commit()
         print("Data saved to database successfully!")
     except Exception as e:
@@ -83,8 +110,8 @@ async def monitor_temperature(mac_address, interval=60):
 
 async def main():
     parser = argparse.ArgumentParser(description='Read Xiaomi Thermometer data and save to database')
-    parser.add_argument('--mac', type=str, default=MAC_ADDRESS,
-                      help='MAC address of the thermometer')
+    parser.add_argument('--mac', type=str, required=True,
+                      help='MAC address of the thermometer (required)')
     parser.add_argument('--interval', type=int, default=6,
                       help='Interval between readings in seconds (default: 6)')
     args = parser.parse_args()
