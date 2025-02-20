@@ -51,11 +51,13 @@ async def connect_and_read(address):
             
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
+            # 显示电池信息但不保存到数据库
+            print(f"Battery level: {battery_level}%")
+            
             return {
                 'currentTime': current_time, 
                 'temperature': temperature,
-                'humidity': humidity,
-                'battery': battery_level
+                'humidity': humidity
             }
             
     except Exception as e:
@@ -74,8 +76,9 @@ def save_to_database(data):
     try:
         connection = pymysql.connect(**db_config)
         with connection.cursor() as cursor:
-            sql = "INSERT INTO `temp_table` (`currentTime`, `temperature`, `humidity`, `battery`) VALUES (%s, %s, %s, %s)"
-            cursor.execute(sql, (data['currentTime'], data['temperature'], data['humidity'], data['battery']))
+            # 移除battery字段
+            sql = "INSERT INTO `temp_table` (`currentTime`, `temperature`, `humidity`) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (data['currentTime'], data['temperature'], data['humidity']))
         connection.commit()
         print("Data saved to database successfully!")
     except Exception as e:
